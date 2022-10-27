@@ -23,7 +23,7 @@ from mne_connectivity import Connectivity
 import matplotlib.pyplot as plt
 
 class Agg:
-    def __init__(self,data=[],event_lab=[],event_ind=[],freq=500,tmin=-1,tmax=6):
+    def __init__(self,data=[],event_lab=[],event_ind=[],freq=500,tmin=-1,tmax=3):
         '''data:19通道的data
            event_lab: event 对应的label
            event_ind: event 对应的index
@@ -291,7 +291,8 @@ class Agg:
             self.epoch: the epoch based on the training dataset
             self.test_epoch: the epoch based on the testing dataset
         '''
-
+        if tmin>=tmax:
+            raise ValueError("the minimum time must be greater than the maximum time.")
         if test==False:
             data=self.data
             ind=self.ind
@@ -336,6 +337,9 @@ class Agg:
             self.test_lab:labels of testing part of the cross-validation stage
             self.test_epoch: epochs of testing part of the cross-validation
         '''
+        if stage>=cross_time:
+            raise ValueError("Stage must be less than the number of cross time we set")
+
         ratio=(cross_time-1)/cross_time
         lab=self.lab
         epoch=self.epoch
@@ -390,6 +394,10 @@ class Agg:
             self.test_Feature["Freq_Welch"]: test_data after transformation [channel1_freq, channel2_freq,... channel19_freq]
 
         '''
+        if high_freq>=self.freq:
+            raise ValueError("the highest frequency must be lower than the sampling frequency")
+        if low_freq<0:
+            raise ValueError("the lowest frequency must be greater than zero")
         if train==True:
             epoch=self.train_epoch
             freq=self.freq
@@ -474,6 +482,11 @@ class Agg:
             self.test_Feature["Freq_Welch"]: test_data after transformation [channel1_freq, channel2_freq,... channel19_freq]
 
         '''
+        if high_freq>=self.freq:
+            raise ValueError("the highest frequency must be lower than the sampling frequency")
+        if low_freq<0:
+            raise ValueError("the lowest frequency must be greater than zero")
+        
         if train==True:
             epoch=self.train_epoch
             freq=self.freq
@@ -483,8 +496,6 @@ class Agg:
                 a=[]
                 each_epoch=epoch[i,:,:]
                 f,t,Zxx=scipy.signal.stft(each_epoch,fs=freq,nperseg=nperseg)
-                print(f)
-                print(t)
                 for i in range(len(f)):
                     if f[i]>=low_freq:
                         low=i
@@ -568,12 +579,15 @@ class Agg:
         train_epoch=self.train_epoch
         train_data=[]
         for i in train_epoch:
-            train_data=np.concatenate(train_data,i,axis=0)
+            if train_data==[]:
+                train_data=i 
+            else:
+                train_data=np.concatenate((train_data,i),axis=1)
         maps, segmentation = mne_microstates.segment(train_data, n_states=num_states)
         length=len(train_epoch[0][0])
         seg=[]
         for i in range(len(train_epoch)):
-            seg.append(segmentation[i*length:(i+1)*length+1])
+            seg.append(segmentation[i*length:(i+1)*length])
         seg=np.array(seg)
         self.train_Feature.update(MicroState=seg)
         self.map=maps
@@ -590,7 +604,10 @@ class Agg:
         test_micro_state=[]
         test_data=[]
         for i in test_epoch:
-            test_data=np.concatenate(test_data,i,axis=0)
+            if test_data==[]:
+                test_data=i 
+            else:
+                test_data=np.concatenate((test_data,i),axis=1)
 
         for i in range(len(test_data[0])):
             data_point=test_data[:,i]
@@ -598,12 +615,12 @@ class Agg:
             for j in range(len(map)):
                 dis=np.linalg.norm(data_point - map[j])
                 tmp.append(abs(dis))
-            group=tmp.ind(min(tmp))
+            group=tmp.index(min(tmp))
             test_micro_state.append(group)
         length=len(test_epoch[0][0])
         seg=[]
         for i in range(len(test_epoch)):
-            seg.append(test_micro_state[i*length:(i+1)*length+1])
+            seg.append(test_micro_state[i*length:(i+1)*length])
         seg=np.array(seg)
         self.test_Feature.update(MicroState=seg)
 
@@ -626,6 +643,8 @@ class Agg:
                 lab=self.train_lab
 
             elif len(feature)!=0:
+                if (feature in self.train_FeaChannel)==False:
+                    raise ValueError("this feature is not in the dataset")
                 data=self.train_FeaChannel[feature]
                 lab=self.train_lab
 
@@ -644,6 +663,9 @@ class Agg:
                 lab=self.test_lab
 
             elif len(feature)!=0:
+                if (feature in self.test_FeaChannel)==False:
+                    raise ValueError("this feature is not in the dataset")
+
                 data=self.test_FeaChannel[feature]
                 lab=self.test_lab
 
@@ -652,6 +674,18 @@ class Agg:
             self.test_Feature[feature]=eeg_data
 
     def EMS(self,feature="",train=True):#
+        '''
+        Transformer to compute event-matched spatial filters.
+        This version of EMS operates on the entire time course. No time window needs to be specified. 
+        The result is a spatial filter at each time point and a corresponding time course. 
+        Intuitively, the result gives the similarity between the filter at each time point and the data vector (sensors) at that time point.
+        Args:
+        feature: which feature data used to constract EMS
+        train: the data is training set and testing set
+        returns:
+        self.model: the ems model used to compute
+        self.train_Feature:data after transformation
+        '''
         if train==True:
             if len(feature)==0:
                 feature="Original"
@@ -659,6 +693,9 @@ class Agg:
                 lab=self.train_lab
 
             elif len(feature)!=0:
+                if (feature in self.train_FeaChannel)==False:
+                    raise ValueError("this feature is not in the dataset")
+
                 data=self.train_FeaChannel[feature]
                 lab=self.train_lab
 
@@ -677,6 +714,9 @@ class Agg:
                 lab=self.test_lab
 
             elif len(feature)!=0:
+                if (feature in self.test_FeaChannel)==False:
+                    raise ValueError("this feature is not in the dataset")
+
                 data=self.test_FeaChannel[feature]
                 lab=self.test_lab
 
@@ -692,9 +732,18 @@ class Agg:
         #need to use the epoch_data (right after create epochs)
         '''
         permute the train data to avoid the 5 left,5 right pattern
+        Args:
+            feature:feature used in this model
+        return:
+            self.train_Feature: the data after permutation
+            self.train_lab: the data label after permutation
         '''
         if len(feature)==0:
             feature="Original"
+
+        if (feature in self.train_Feature)==False:
+            raise ValueError("this feature is not in the dataset")
+
         data=self.train_Feature[feature]
         lab=self.train_lab
         per = np.random.permutation(data.shape[0])
@@ -727,6 +776,9 @@ class Agg:
                 feature="Original"
                 data=self.train_Feature["Original"]
             else:
+                if (feature in self.train_Feature)==False:
+                    raise ValueError("this feature is not in the dataset")
+
                 data=self.train_Feature[feature]
                 pca=KernelPCA(n_components=num_components)
                 data_transformed=pca.fit_transform(data)
@@ -738,6 +790,8 @@ class Agg:
             if feature==0:
                 data=self.test_Feature["Original"]
             else:
+                if (feature in self.test_Feature)==False:
+                    raise ValueError("this feature is not in the dataset")
                 data=self.test_Feature[feature]
                 model=self.model["PCA"]
                 data_transformed=model.fit_transform(data)
@@ -748,12 +802,18 @@ class Agg:
     def LDA(self,feature=''):
         '''
         train the LDA model
-        return: add LDA model into the model set
+        Args:
+        feature: the data under which feature to train the data
+        return: 
+        self.model: add LDA model into the model set
         '''
         if len(feature) == 0:#we only use one feature(the original data or micro state)
             feature="Original"
         else:
             feature=feature
+        if (feature in self.train_Feature)==False:
+            raise ValueError("this feature is not in the dataset")
+
         data=self.train_Feature[feature]
         lab=self.train_lab
 
@@ -765,10 +825,22 @@ class Agg:
 
 
     def SVM(self,feature=""):
+        '''
+        train the SVM model
+        Args:
+        feature: the data under which feature to train the data
+        return: 
+        self.model: add SVM model into the model set
+        '''
+
         if len(feature) == 0:#we only use one feature(the original data or micro state)
             feature="Original"
         else:
             feature=feature
+        
+        if (feature in self.train_Feature)==False:
+            raise ValueError("this feature is not in the dataset")
+
         data=self.train_Feature[feature]
         lab=self.train_lab
 
@@ -784,10 +856,22 @@ class Agg:
         #print(scores)
 
     def RF(self,feature=""):
+        '''
+        train the Random Forest model
+        Args:
+        feature: the data under which feature to train the data
+        return: 
+        self.model: add Random Forest model into the model set
+        '''
+
         if len(feature)==0:
             feature="Original"
         else:
             feature=feature
+
+        if (feature in self.train_Feature)==False:
+            raise ValueError("this feature is not in the dataset")
+
         data=self.train_Feature[feature]
         lab=self.train_lab
 
@@ -804,10 +888,22 @@ class Agg:
         #print(scores)
 
     def GB(self,feature=""):# GradientBoosting
+        '''
+        train the GradientBoosting model
+        Args:
+        feature: the data under which feature to train the data
+        return: 
+        self.model: add GradientBoosting model into the model set
+        '''
+
         if len(feature)==0:
             feature="Original"
         else:
             feature=feature
+        
+        if (feature in self.train_Feature)==False:
+            raise ValueError("this feature is not in the dataset")
+
         data=self.train_Feature[feature]
         lab=self.train_lab
 
@@ -826,13 +922,27 @@ class Agg:
 
     
     def predict(self,model="",feature='',add_model=None):
-        '''use differnet model to predict'''
+        '''
+        use differnet model to predict
+        Args:
+            model: which model used to predict
+            feature: which feature used to predict
+            add_model:whether to use another model to do the prediction
+        '''
         if len(model)==0:
             raise DimentionalError("need to put the type of model")
+
+        if (model in self.model)==False:
+            raise ValueError("this feature is not in the dataset")
+    
         if len(feature) == 0:#we only use one feature(the original data or micro state)
             feature="Original"
         else:
             feature=feature
+
+        if (feature in self.test_Feature)==False:
+            raise ValueError("this feature is not in the dataset")
+
         data=self.test_Feature[feature]
         lab=self.test_lab
         if add_model==None:

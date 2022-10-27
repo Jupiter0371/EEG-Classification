@@ -30,7 +30,7 @@ class _model_:
             if self.feature=="MicroState":
                 Tri.micro_state()
                 Tri.get_micro_state()
-            
+                
             CSP=self.Reduction[0]
             PCA=self.Reduction[1]
 
@@ -55,16 +55,19 @@ class _model_:
             cross_result.append(result[1])
         print(cross_result)
         print("Cross_result")
+        mini=min(cross_result)
         Tri.train_epoch=Tri.epoch
         Tri.train_lab=self.lab
         Tri.train_ind=self.ind
         if self.feature=="TimeFreq_STFT":
             Tri.STFT()
-
+            map=None
         if self.feature=="Freq_Welch":
             Tri.Welch()
+            map=None
         if self.feature=="MicroState":
             Tri.micro_state()
+            map=Tri.map
 
         CSP=self.Reduction[0]
         PCA=self.Reduction[1]        
@@ -85,5 +88,5 @@ class _model_:
             Tri.GB(feature=self.feature)
         mean=np.mean(cross_result)
         var=np.var(cross_result)
-        self.res.update(mean=mean,variance=var,feature=self.feature,Reduction=(CSP,PCA),model=Tri.model[self.model])
+        self.res.update(mean=mean,variance=var,mini=mini,feature=self.feature,Map=map,Reduction=(CSP,PCA),model=Tri.model[self.model])
         return self.res
